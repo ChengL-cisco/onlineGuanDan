@@ -8,10 +8,10 @@ type Info struct {
 	grp1Name string
 	// grp2Name is the name of group 2
 	grp2Name string
-	// readyToStartIndexes is the list of indexes of players who are ready to start
-	readyToStartIndexes []int
-	// readyToPlayIndexes is the list of indexes of players who are ready to play
-	readyToPlayIndexes []int
+	// readyToStart is a map of player indexes to their ready status
+	readyToStart map[int]bool
+	// readyToPlay is a map of player indexes to their ready to play status
+	readyToPlay map[int]bool
 	// isFirstRound is true if it is the first round of the game
 	isFirstRound bool
 	// isRoundInSession is true if a round is currently in session
@@ -32,6 +32,49 @@ type Info struct {
 	secondToLastFinishedIndex int
 	// lastPlayedCards is the list of cards played by the last player
 	lastPlayedCards []Card
+	// available slots for players
+	availableSlots map[int]bool
+	// names of players
+	names map[int]string
+}
+
+// GetReadyToStartMap returns a reference to the readyToStart map
+func (i *Info) GetReadyToStartMap() map[int]bool {
+	if i.readyToStart == nil {
+		i.readyToStart = make(map[int]bool)
+	}
+	return i.readyToStart
+}
+
+// SetReadyToStartMap sets the readyToStart map reference
+func (i *Info) SetReadyToStartMap(ready map[int]bool) {
+	i.readyToStart = ready
+}
+
+// GetAvailableSlots returns a reference to the availableSlots map
+func (i *Info) GetAvailableSlots() map[int]bool {
+	if i.availableSlots == nil {
+		i.availableSlots = make(map[int]bool)
+	}
+	return i.availableSlots
+}
+
+// SetAvailableSlots sets the availableSlots map reference
+func (i *Info) SetAvailableSlots(slots map[int]bool) {
+	i.availableSlots = slots
+}
+
+// GetNames returns a reference to the names map
+func (i *Info) GetNames() map[int]string {
+	if i.names == nil {
+		i.names = make(map[int]string)
+	}
+	return i.names
+}
+
+// SetNames sets the names map reference
+func (i *Info) SetNames(names map[int]string) {
+	i.names = names
 }
 
 // GetNumPlayers returns the number of players in the game
@@ -72,40 +115,43 @@ func (i *Info) SetGrp2Name(name string) {
 	i.grp2Name = name
 }
 
-// GetReadyToStartIndexes returns the list of player indexes who are ready to start
-func (i *Info) GetReadyToStartIndexes() []int {
-	return i.readyToStartIndexes
+// SetReadyToPlay sets the map of player indexes to their ready to play status
+func (i *Info) SetReadyToPlay(readyMap map[int]bool) {
+	i.readyToPlay = readyMap
 }
 
-// SetReadyToStartIndexes sets the list of player indexes who are ready to start
-func (i *Info) SetReadyToStartIndexes(indexes []int) {
-	i.readyToStartIndexes = make([]int, len(indexes))
-	copy(i.readyToStartIndexes, indexes)
-}
-
-// GetReadyToPlayIndexes returns the list of player indexes who are ready to play
-func (i *Info) GetReadyToPlayIndexes() []int {
-	return i.readyToPlayIndexes
-}
-
-// SetReadyToPlayIndexes sets the list of player indexes who are ready to play
-func (i *Info) SetReadyToPlayIndexes(indexes []int) {
-	i.readyToPlayIndexes = make([]int, len(indexes))
-	copy(i.readyToPlayIndexes, indexes)
-}
-
-// ResetReadyToStartIndexes resets all readyToStartIndexes to 0
-func (i *Info) ResetReadyToStartIndexes() {
-	for j := range i.readyToStartIndexes {
-		i.readyToStartIndexes[j] = 0
+// GetReadyToPlay returns the map of player indexes to their ready to play status
+func (i *Info) GetReadyToPlay() map[int]bool {
+	if i.readyToPlay == nil {
+		i.readyToPlay = make(map[int]bool)
 	}
+	return i.readyToPlay
 }
 
-// ResetReadyToPlayIndexes resets all readyToPlayIndexes to 0
-func (i *Info) ResetReadyToPlayIndexes() {
-	for j := range i.readyToPlayIndexes {
-		i.readyToPlayIndexes[j] = 0
+// AddReadyToPlay sets a player's ready to play status to true
+func (i *Info) AddReadyToPlay(index int) {
+	if i.readyToPlay == nil {
+		i.readyToPlay = make(map[int]bool)
 	}
+	i.readyToPlay[index] = true
+}
+
+// RemoveReadyToPlay removes a player's ready to play status
+func (i *Info) RemoveReadyToPlay(index int) {
+	delete(i.readyToPlay, index)
+}
+
+// IsReadyToPlay checks if a player is ready to play
+func (i *Info) IsReadyToPlay(index int) bool {
+	return i.readyToPlay != nil && i.readyToPlay[index]
+}
+
+// AllPlayersReadyToPlay checks if all players are ready to play
+func (i *Info) AllPlayersReadyToPlay() bool {
+	if i.readyToPlay == nil {
+		return false
+	}
+	return len(i.readyToPlay) == i.numPlayers
 }
 
 // GetIsFirstRound returns whether it's the first round of the game

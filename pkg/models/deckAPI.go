@@ -6,7 +6,7 @@ type DeckAPI interface {
 	Initialize(numDecks int) []Card
 
 	// Split splits the deck into numPlayers equal parts
-	Split(numPlayers int) [][]Card
+	Split(numPlayers int) []*Deck
 
 	// GetCards returns a copy of all cards in the deck
 	GetCards() []Card
@@ -41,10 +41,16 @@ type DeckAPI interface {
 	// MoveNCards moves a range of cards from start to end (inclusive) to the destination index
 	MoveNCards(start, end, dest int) bool
 
-	// Sort sorts the cards in the deck with jokers first, then cards matching the trump card's rank,
+	// MoveNDCards moves multiple cards specified by their indices to the destination index.
+	// Returns true if the move was successful, false if any index is out of bounds.
+	// The moved cards will maintain their relative order.
+	// If the destination is within the source range, returns false as this would create an invalid state.
+	MoveNDCards(srcIndexes []int, dest int) bool
+
+	// Sort sorts the cards in the deck with jokers first, then cards matching the trump rank,
 	// then other cards by rank
 	// todo: use the sort algorithm provided by Rule
-	Sort(trumpCard Card)
+	Sort(trumpRank Rank)
 
 	// String returns a string representation of all cards in the deck
 	String() string

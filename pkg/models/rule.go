@@ -2,6 +2,14 @@ package models
 
 import "sort"
 
+// NumOfDecks calculates the number of decks needed based on the number of players.
+func NumOfDecks(numOfPlayers int) int {
+	if numOfPlayers <= 0 {
+		return 0
+	}
+	return int(float64(numOfPlayers) * 0.5)
+}
+
 // Rule represents the game rules and logic
 // This struct will contain methods that define how the game is played
 // and how game state transitions occur

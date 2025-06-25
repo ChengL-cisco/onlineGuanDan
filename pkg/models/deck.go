@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"time"
@@ -11,7 +12,7 @@ type Deck struct {
 	cards []Card
 }
 
-// NewDeck creates and returns a new, unshuffled deck of cards
+// NewDeck creates and returns a new, shuffled deck of cards
 func NewDeck(numDecks int) *Deck {
 	d := &Deck{}
 	d.Initialize(numDecks)
@@ -23,16 +24,18 @@ func NewDeck(numDecks int) *Deck {
 func (d *Deck) Initialize(numDecks int) []Card {
 	d.cards = make([]Card, 0, numDecks*54)
 
-	// Add standard cards (2-Ace of each suit)
-	for _, suit := range []Suit{Spade, Heart, Diamond, Club} {
-		for rank := Two; rank <= Ace; rank++ {
-			d.cards = append(d.cards, NewCard(suit, rank))
+	for i := 0; i < numDecks; i++ {
+		// Add standard cards (2-Ace of each suit)
+		for _, suit := range []Suit{Spade, Heart, Diamond, Club} {
+			for rank := Two; rank <= Ace; rank++ {
+				d.cards = append(d.cards, NewCard(suit, rank))
+			}
 		}
-	}
 
-	// Add jokers
-	d.cards = append(d.cards, NewCard("", Joker))    // Small Joker
-	d.cards = append(d.cards, NewCard("", BigJoker)) // Big Joker
+		// Add jokers
+		d.cards = append(d.cards, NewCard("", Joker))    // Small Joker
+		d.cards = append(d.cards, NewCard("", BigJoker)) // Big Joker
+	}
 
 	// Shuffle the deck
 	d.Shuffle()
@@ -44,7 +47,7 @@ func (d *Deck) Initialize(numDecks int) []Card {
 // Returns a slice of card slices, where each inner slice represents one player's cards.
 // If the deck can't be evenly divided, some players may receive one more card than others.
 // Returns nil if numPlayers is less than 1.
-func (d *Deck) Split(numPlayers int) [][]Card {
+func (d *Deck) Split(numPlayers int) []*Deck {
 	if numPlayers <= 0 || len(d.cards) == 0 {
 		return nil
 	}
@@ -53,7 +56,7 @@ func (d *Deck) Split(numPlayers int) [][]Card {
 	cardsPerPlayer := len(d.cards) / numPlayers
 	extraCards := len(d.cards) % numPlayers
 
-	result := make([][]Card, 0, numPlayers)
+	result := make([]*Deck, 0, numPlayers)
 	start := 0
 
 	for i := 0; i < numPlayers; i++ {
@@ -77,7 +80,8 @@ func (d *Deck) Split(numPlayers int) [][]Card {
 		// Add this player's cards to the result
 		playerCards := make([]Card, end-start)
 		copy(playerCards, d.cards[start:end])
-		result = append(result, playerCards)
+		playerDeck := &Deck{cards: playerCards}
+		result = append(result, playerDeck)
 
 		start = end
 	}
@@ -128,12 +132,18 @@ func (d *Deck) String() string {
 	}
 
 	result := ""
+	// Construct two lines, first line is index, second line is the card
+	indexLine := ""
+	cardLine := ""
 	for i, card := range d.cards {
-		if i > 0 {
-			result += " "
-		}
-		result += card.String()
+		// Calculate padding for index to center it above the card
+		indexStr := fmt.Sprintf("%2d", i)
+
+		// Add index with padding
+		indexLine += fmt.Sprintf("%-*s", 5, indexStr)
+		cardLine += fmt.Sprintf("%-*s", 5, card.String())
 	}
+	result = indexLine + "\n" + cardLine
 	return result
 }
 
@@ -283,6 +293,64 @@ func (d *Deck) PlayN(cards []Card) bool {
 	return true
 }
 
+// MoveNDCards moves multiple cards specified by their indices to the destination index.
+// Returns true if the move was successful, false if any index is out of bounds.
+// The moved cards will maintain their relative order.
+// If the destination is within the source range, returns false as this would create an invalid state.
+func (d *Deck) MoveNDCards(srcIndexes []int, dest int) bool {
+	if len(srcIndexes) == 0 {
+		return false
+	}
+
+	// Validate indices and check for duplicates
+	seen := make(map[int]bool)
+	minIndex := len(d.cards)
+	maxIndex := 0
+	for _, idx := range srcIndexes {
+		if idx < 0 || idx >= len(d.cards) || seen[idx] {
+			return false
+		}
+		seen[idx] = true
+		if idx < minIndex {
+			minIndex = idx
+		}
+		if idx > maxIndex {
+			maxIndex = idx
+		}
+	}
+
+	// Check if destination is within the source range
+	if dest >= minIndex && dest <= maxIndex+1 {
+		return false
+	}
+
+	// Sort the source indices to maintain relative order
+	sortedIndexes := make([]int, len(srcIndexes))
+	copy(sortedIndexes, srcIndexes)
+	sort.Ints(sortedIndexes)
+
+	// Extract the cards to move
+	cardsToMove := make([]Card, len(sortedIndexes))
+	for i, idx := range sortedIndexes {
+		cardsToMove[i] = d.cards[idx]
+	}
+
+	// Remove the cards from the source (from highest to lowest to maintain correct indices)
+	for i := len(sortedIndexes) - 1; i >= 0; i-- {
+		idx := sortedIndexes[i]
+		d.cards = append(d.cards[:idx], d.cards[idx+1:]...)
+	}
+
+	// Adjust destination index if it was after the source range
+	if dest > maxIndex {
+		dest -= len(sortedIndexes)
+	}
+
+	// Insert the cards at the destination
+	d.cards = append(d.cards[:dest], append(cardsToMove, d.cards[dest:]...)...)
+	return true
+}
+
 // MoveNCards moves a range of cards from start to end (inclusive) to the destination index.
 // Returns true if the move was successful, false if any index is out of bounds.
 // The moved cards will maintain their relative order.
@@ -361,9 +429,9 @@ func (d *Deck) GetCards() []Card {
 
 // Sort sorts the cards in the deck with the following order:
 // 1. Jokers (Big Joker > Small Joker)
-// 2. Cards matching the trump card's rank (by suit: Spade > Heart > Club > Diamond)
+// 2. Cards matching the trump rank (by suit: Spade > Heart > Club > Diamond)
 // 3. Other cards (by rank, then by suit)
-func (d *Deck) Sort(trumpCard Card) {
+func (d *Deck) Sort(trumpRank Rank) {
 	if len(d.cards) <= 1 {
 		return
 	}
@@ -387,19 +455,18 @@ func (d *Deck) Sort(trumpCard Card) {
 		}
 
 		// Then cards matching the trump rank
-		aIsTrumpRank := a.Rank == trumpCard.Rank
-		bIsTrumpRank := b.Rank == trumpCard.Rank
+		aIsTrump := a.Rank == trumpRank
+		bIsTrump := b.Rank == trumpRank
 
-		if aIsTrumpRank && !bIsTrumpRank {
+		if aIsTrump && !bIsTrump {
 			return true
 		}
-		if !aIsTrumpRank && bIsTrumpRank {
+		if !aIsTrump && bIsTrump {
 			return false
 		}
-		if aIsTrumpRank && bIsTrumpRank {
+		if aIsTrump && bIsTrump {
 			// Both are trump rank, sort by suit
-			suitOrder := map[Suit]int{Spade: 4, Heart: 3, Club: 2, Diamond: 1}
-			return suitOrder[a.Suit] > suitOrder[b.Suit]
+			return a.Suit > b.Suit
 		}
 
 		// For non-trump cards, sort by rank then by suit

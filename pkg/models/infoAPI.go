@@ -13,12 +13,18 @@ type InfoAPI interface {
 	SetGrp2Name(name string)
 
 	// Ready states
-	GetReadyToStartIndexes() []int
-	SetReadyToStartIndexes(indexes []int)
-	ResetReadyToStartIndexes()
-	GetReadyToPlayIndexes() []int
-	SetReadyToPlayIndexes(indexes []int)
-	ResetReadyToPlayIndexes()
+	GetReadyToStartMap() map[int]bool
+	SetReadyToStartMap(ready map[int]bool)
+	GetReadyToPlay() map[int]bool
+	SetReadyToPlay(readyMap map[int]bool)
+	AddReadyToPlay(index int)
+	RemoveReadyToPlay(index int)
+	IsReadyToPlay(index int) bool
+	AllPlayersReadyToPlay() bool
+	GetAvailableSlots() map[int]bool
+	SetAvailableSlots(slots map[int]bool)
+	GetNames() map[int]string
+	SetNames(names map[int]string)
 
 	// Round information
 	GetIsFirstRound() bool

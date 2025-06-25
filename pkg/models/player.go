@@ -26,33 +26,20 @@ func (p *Player) Sit(index int) {
 	p.index = index
 }
 
-// ReadyToStart marks the player as ready to start by updating the readyToStartIndexes in info
+// ReadyToStart marks the player as ready to start by updating the ready status in info
 func (p *Player) ReadyToStart() {
 	if p.info == nil {
 		return
 	}
-	indexes := p.info.GetReadyToStartIndexes()
-	if indexes == nil {
-		indexes = make([]int, p.info.GetNumPlayers())
-	}
-
-	indexes[p.index] = 1
-	p.info.SetReadyToStartIndexes(indexes)
-
+	p.info.GetReadyToStartMap()[p.index] = true
 }
 
-// ReadyToPlay marks the player as ready to play by updating the readyToPlayIndexes in info
+// ReadyToPlay marks the player as ready to play by updating the readyToPlay map in info
 func (p *Player) ReadyToPlay() {
 	if p.info == nil {
 		return
 	}
-	indexes := p.info.GetReadyToPlayIndexes()
-	if indexes == nil {
-		indexes = make([]int, p.info.GetNumPlayers())
-	}
-
-	indexes[p.index] = 1
-	p.info.SetReadyToPlayIndexes(indexes)
+	p.info.AddReadyToPlay(p.index)
 }
 
 // Pass advances the current player index to the next player, wrapping around to 0 if needed
@@ -65,14 +52,12 @@ func (p *Player) Pass() {
 	p.info.SetCurrentPlayerIndex(next)
 }
 
-// LeaveGame resets the readyToStartIndexes in info to 0 at the player's index
+// LeaveGame resets the ready status for the player in info
 func (p *Player) LeaveGame() {
 	if p.info == nil {
 		return
 	}
-	indexes := p.info.GetReadyToStartIndexes()
-	indexes[p.index] = 0
-	p.info.SetReadyToStartIndexes(indexes)
+	p.info.RemoveReadyToPlay(p.index)
 }
 
 // GetName returns the player's name
