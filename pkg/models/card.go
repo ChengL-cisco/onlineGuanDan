@@ -62,6 +62,59 @@ func SuitToInitial(s Suit) string {
 	}
 }
 
+func RankToString(r Rank) string {
+	switch r {
+	case Jack:
+		return "J"
+	case Queen:
+		return "Q"
+	case King:
+		return "K"
+	case Ace:
+		return "A"
+	default:
+		return fmt.Sprintf("%d", r)
+	}
+}
+
+// StringToRank converts a string representation of a card rank to a Rank type
+func StringToRank(s string) (Rank, error) {
+	switch strings.ToUpper(s) {
+	case "2":
+		return Two, nil
+	case "3":
+		return Three, nil
+	case "4":
+		return Four, nil
+	case "5":
+		return Five, nil
+	case "6":
+		return Six, nil
+	case "7":
+		return Seven, nil
+	case "8":
+		return Eight, nil
+	case "9":
+		return Nine, nil
+	case "10":
+		return Ten, nil
+	case "J":
+		return Jack, nil
+	case "Q":
+		return Queen, nil
+	case "K":
+		return King, nil
+	case "A":
+		return Ace, nil
+	case "JR":
+		return Joker, nil
+	case "BJR":
+		return BigJoker, nil
+	default:
+		return 0, fmt.Errorf("invalid rank: %s", s)
+	}
+}
+
 // String returns a string representation of the card
 func (c Card) String() string {
 	if c.Rank == Joker {

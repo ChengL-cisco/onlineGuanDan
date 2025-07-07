@@ -17,6 +17,10 @@ type Rule struct {
 	info InfoAPI
 }
 
+func (r *Rule) SetInfo(info *Info) {
+	r.info = info
+}
+
 // isPlayValid validates a card play according to the game rules
 // It returns true for the following cases:
 // 1. Single card
@@ -145,6 +149,31 @@ func (r *Rule) IsCounterPlayValid(play []Card, counterPlay []Card) bool {
 			if r.isStraightFlush(counterPlay) && r.IsRankGreater(counterPlay[len(counterPlay)-1].Rank, play[len(play)-1].Rank) {
 				return true
 			}
+		} else if r.isStraight(play) {
+			// If play is a straight, return true if counterPlay is also a straight but the ending rank is higher
+			if r.isStraight(counterPlay) && r.IsRankGreater(counterPlay[len(counterPlay)-1].Rank, play[len(play)-1].Rank) {
+				return true
+			}
+
+			if r.allSameRank(counterPlay) && len(counterPlay) >= 4 {
+				return true
+			}
+
+			if r.isStraightFlush(counterPlay) {
+				return true
+			}
+		} else if r.isFullHouse(play) {
+			if r.isFullHouse(counterPlay) && r.isGreaterFullHouse(counterPlay, play) {
+				return true
+			}
+
+			if r.allSameRank(counterPlay) && len(counterPlay) >= 4 {
+				return true
+			}
+
+			if r.isStraightFlush(counterPlay) {
+				return true
+			}
 		}
 
 		// Otherwise, not a valid counter play
@@ -265,6 +294,56 @@ func (r *Rule) IsRankGreater(rank1 Rank, rank2 Rank) bool {
 	}
 }
 
+// isFullHouse checks if the cards form a full house (3 of a kind and a pair)
+func (r *Rule) isFullHouse(cards []Card) bool {
+	rankCount := r.countRanks(cards)
+	if len(rankCount) != 2 {
+		return false
+	}
+
+	var hasThree, hasTwo bool
+	for _, count := range rankCount {
+		switch count {
+		case 2:
+			hasTwo = true
+		case 3:
+			hasThree = true
+		default:
+			return false
+		}
+	}
+	return hasTwo && hasThree
+}
+
+// isGreaterFullHouse compares two full house hands and returns true if the second hand is greater
+// A full house is ranked by the rank of its three-of-a-kind first, then by the rank of its pair
+func (r *Rule) isGreaterFullHouse(hand1, hand2 []Card) bool {
+	if !r.isFullHouse(hand1) || !r.isFullHouse(hand2) {
+		return false
+	}
+
+	// Get the three-of-a-kind and pair ranks for both hands
+	hand1ThreeRank := r.getFullHouseRanks(hand1)
+	hand2ThreeRank := r.getFullHouseRanks(hand2)
+
+	// First compare the three-of-a-kind rank
+	return r.IsRankGreater(hand2ThreeRank, hand1ThreeRank)
+}
+
+// getFullHouseRanks returns the three-of-a-kind rank of a full house
+func (r *Rule) getFullHouseRanks(cards []Card) Rank {
+	rankCount := r.countRanks(cards)
+	var threeRank Rank
+
+	for rank, count := range rankCount {
+		switch count {
+		case 3:
+			threeRank = rank
+		}
+	}
+	return threeRank
+}
+
 // isValidFiveCardPlay checks if a 5-card play is valid
 func (r *Rule) isValidFiveCardPlay(cards []Card) bool {
 	// Check for five of a kind
@@ -273,14 +352,7 @@ func (r *Rule) isValidFiveCardPlay(cards []Card) bool {
 	}
 
 	// Check for full house (3+2)
-	rankCount := r.countRanks(cards)
-	if len(rankCount) == 2 {
-		for _, count := range rankCount {
-			if count == 2 || count == 3 {
-				continue
-			}
-			return false
-		}
+	if r.isFullHouse(cards) {
 		return true
 	}
 

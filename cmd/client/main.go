@@ -17,11 +17,13 @@ import (
 )
 
 var (
-	serverAddr = flag.String("server", "localhost:8080", "WebSocket server address")
-	name       = flag.String("name", "Player", "Player name")
-	reader     = bufio.NewReader(os.Stdin)
-	index      = 0
-	playerDeck *models.Deck
+	serverAddr        = flag.String("server", "localhost:8080", "WebSocket server address")
+	name              = flag.String("name", "Player", "Player name")
+	reader            = bufio.NewReader(os.Stdin)
+	index             = 0
+	playerDeck        *models.Deck
+	playAttempt       []models.Card
+	equivalentAttempt []models.Card
 )
 
 func organizeCards(conn *websocket.Conn) {
@@ -99,25 +101,104 @@ func organizeCards(conn *websocket.Conn) {
 	}
 }
 
+func disconnect(conn *websocket.Conn) error {
+	// Send a close message to the server
+	err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "User requested disconnect"))
+	if err != nil {
+		log.Printf("Warning: error sending close message: %v", err)
+	}
+
+	// Wait a moment for the message to be sent
+	time.Sleep(100 * time.Millisecond)
+
+	// Close the connection
+	return conn.Close()
+}
+
 // handleAllJoined handles the allJoined message from the server
 func handleAllJoined(conn *websocket.Conn) error {
 	log.Printf("Everybody joined, ready to start")
-	fmt.Print("Type Y to indicate ready to start: ")
+	fmt.Print("Type Y to indicate ready to start or N to quit the game ")
 	readyToStart, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 	readyToStart = strings.ToUpper(strings.TrimSpace(readyToStart))
-	if readyToStart != "Y" {
-		return fmt.Errorf("user not ready to start")
+
+	if readyToStart == "N" {
+		log.Println("User chose to quit the game")
+		if err := disconnect(conn); err != nil {
+			return fmt.Errorf("error disconnecting: %w", err)
+		}
+		return fmt.Errorf("user chose to quit the game")
 	}
 
-	// Send ready to start message
 	if err := conn.WriteMessage(websocket.TextMessage, models.BuildClientMessage(index, "ready", *name)); err != nil {
 		return fmt.Errorf("error sending ready message: %w", err)
 	}
 
 	return nil
+}
+
+func getCardsFromIndexes() []models.Card {
+	fmt.Println(playerDeck.String())
+	fmt.Println("It's your turn to play!")
+	fmt.Println("pick the card indexes to play or type 'p' to pass:")
+	var input string
+	fmt.Scan(&input)
+	if input == "p" {
+		return nil
+	}
+	var start, end int
+	var sourceIndexes []int
+	if strings.Contains(input, ",") {
+		// Handle multiple index input (e.g., "2,4,6")
+		parts := strings.Split(input, ",")
+		sourceIndexes = make([]int, len(parts))
+		for i, part := range parts {
+			var err error
+			sourceIndexes[i], err = strconv.Atoi(part)
+			if err != nil || sourceIndexes[i] < 0 {
+				fmt.Println("Invalid index. Please use positive numbers")
+				return nil
+			}
+		}
+	} else if strings.Contains(input, "-") {
+		// Handle range input (e.g., "2-4")
+		parts := strings.Split(input, "-")
+		if len(parts) != 2 {
+			fmt.Println("Invalid range format. Use 'start-end' (e.g., '2-4')")
+			return nil
+		}
+		var err1, err2 error
+		start, err1 = strconv.Atoi(parts[0])
+		end, err2 = strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil || start < 0 || end < start {
+			fmt.Println("Invalid range. Please use positive numbers in format 'start-end'")
+			return nil
+		}
+		sourceIndexes = make([]int, end-start+1)
+		for i := 0; i <= end-start; i++ {
+			sourceIndexes[i] = start + i
+		}
+	} else {
+		// Handle single index input
+		var err error
+		start, err = strconv.Atoi(input)
+		if err != nil || start < 0 {
+			fmt.Println("Invalid index. Please use a positive number")
+			return nil
+		}
+		sourceIndexes = []int{start}
+	}
+
+	cards := make([]models.Card, 0, len(sourceIndexes))
+	for _, idx := range sourceIndexes {
+		if idx < len(playerDeck.GetCards()) {
+			cards = append(cards, playerDeck.GetCards()[idx])
+		}
+	}
+	return cards
 }
 
 // selectAndJoinSlot handles the slot selection and join process
@@ -198,6 +279,8 @@ func main() {
 					log.Printf("Error joining slot: %v", err)
 					return
 				}
+			case "joinConfirm":
+				log.Printf("Joined successfully")
 			case "allJoined":
 				if err := handleAllJoined(conn); err != nil {
 					log.Printf("Error handling all joined: %v", err)
@@ -207,7 +290,7 @@ func main() {
 					}
 					return
 				}
-			case "cards":
+			case "startRound":
 				deck, err := models.NewDeckFromString(msg.Data)
 				if err != nil {
 					log.Printf("Failed to parse cards: %v", err)
@@ -224,55 +307,31 @@ func main() {
 					log.Printf("Failed to parse index: %v", err)
 					return
 				}
+				fmt.Printf("Player %d's turn\n", playerIndex)
 				if index == playerIndex {
-					fmt.Println("It's your turn to play!")
-					fmt.Println("pick the card indexes to play:")
-					var input string
-					fmt.Scan(&input)
-					var start, end int
-					var sourceIndexes []int
-					if strings.Contains(input, ",") {
-						// Handle multiple index input (e.g., "2,4,6")
-						parts := strings.Split(input, ",")
-						sourceIndexes = make([]int, len(parts))
-						for i, part := range parts {
-							var err error
-							sourceIndexes[i], err = strconv.Atoi(part)
-							if err != nil || sourceIndexes[i] < 0 {
-								fmt.Println("Invalid index. Please use positive numbers")
-								return
-							}
-						}
-					} else if strings.Contains(input, "-") {
-						// Handle range input (e.g., "2-4")
-						parts := strings.Split(input, "-")
-						if len(parts) != 2 {
-							fmt.Println("Invalid range format. Use 'start-end' (e.g., '2-4')")
-							return
-						}
-						var err1, err2 error
-						start, err1 = strconv.Atoi(parts[0])
-						end, err2 = strconv.Atoi(parts[1])
-						if err1 != nil || err2 != nil || start < 0 || end < start {
-							fmt.Println("Invalid range. Please use positive numbers in format 'start-end'")
-							return
-						}
-						sourceIndexes = make([]int, end-start+1)
-						for i := 0; i <= end-start; i++ {
-							sourceIndexes[i] = start + i
-						}
-					} else {
-						// Handle single index input
-						var err error
-						start, err = strconv.Atoi(input)
-						if err != nil || start < 0 {
-							fmt.Println("Invalid index. Please use a positive number")
-							return
-						}
-						sourceIndexes = []int{start}
-					}
-
+					cards := getCardsFromIndexes()
+					playAttempt = cards
+					conn.WriteMessage(websocket.TextMessage, models.BuildClientMessage(index, "playAttempt", models.CardsString(cards)))
 				}
+			case "invalidPlay":
+				fmt.Println("Invalid play, trying again")
+				cards := getCardsFromIndexes()
+				playAttempt = cards
+				conn.WriteMessage(websocket.TextMessage, models.BuildClientMessage(index, "playAttempt", models.CardsString(cards)))
+			case "validPlay":
+				fmt.Println("Valid play")
+				playerDeck.PlayN(playAttempt)
+				fmt.Println(playerDeck.String())
+				msg := models.ConstructClientPlayMessage(playAttempt, playerDeck.Count(), nil)
+				conn.WriteMessage(websocket.TextMessage, models.BuildClientMessage(index, "play", msg))
+			case "lastPlay":
+				fmt.Println("Last play:")
+				deck, err := models.NewDeckFromString(msg.Data)
+				if err != nil {
+					log.Printf("Failed to parse cards: %v", err)
+					return
+				}
+				fmt.Println(deck.String())
 			}
 		}
 	}()

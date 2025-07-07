@@ -417,14 +417,11 @@ func (d *Deck) MoveCard(src, dest int) bool {
 }
 
 // GetCards returns a copy of the cards in the deck.
-// This ensures the internal slice cannot be modified from outside the package.
 func (d *Deck) GetCards() []Card {
 	if len(d.cards) == 0 {
 		return nil
 	}
-	cards := make([]Card, len(d.cards))
-	copy(cards, d.cards)
-	return cards
+	return d.cards
 }
 
 // Sort sorts the cards in the deck with the following order:

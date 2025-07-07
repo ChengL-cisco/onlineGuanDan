@@ -31,6 +31,7 @@ type Client struct {
 var deck models.DeckAPI
 var (
 	info       = &models.Info{}
+	rule       = &models.Rule{}
 	clients    = make(map[int]*Client) // Map of player index to Client
 	broadcast  = make(chan []byte)     // Broadcast channel
 	mutex      = &sync.Mutex{}         // Mutex to protect clients map
@@ -162,13 +163,11 @@ func (c *Client) processClientMsg() {
 					decks := deck.Split(info.GetNumPlayers())
 					for index, deck := range decks {
 						deck.Sort(info.GetTrumpRank())
-						clients[index].conn.WriteMessage(websocket.TextMessage, models.BuildServerMessage("cards", models.CardsString(deck.GetCards())))
+						clients[index].conn.WriteMessage(websocket.TextMessage, models.BuildServerMessage("startRound", models.ConstructStartRoundServerMessage(deck, info)))
 					}
 
 				}
-				log.Printf("prepare to unlock")
 				mutex.Unlock()
-				log.Printf("unlocked")
 			case "start":
 				log.Printf("Client %s started", msg.Data)
 				mutex.Lock()
@@ -181,12 +180,58 @@ func (c *Client) processClientMsg() {
 					broadcastMessage(models.BuildServerMessage("play", fmt.Sprintf("%d", info.GetCurrentPlayerIndex())))
 				}
 				mutex.Unlock()
+			case "playAttempt":
+				log.Printf("Client %d wants to play %s", msg.Index, msg.Data)
+				deck, err := models.NewDeckFromString(msg.Data)
+				if err != nil {
+					log.Printf("Failed to parse cards: %v", err)
+					return
+				}
+				fmt.Println(deck.String())
+				valid := false
+				if info.GetLastPlayedCards() == nil || info.GetLastPlayedIndex() == msg.Index {
+					if rule.IsPlayValid(deck.GetCards()) {
+						valid = true
+					}
+				} else {
+					if rule.IsCounterPlayValid(info.GetLastPlayedCards(), deck.GetCards()) {
+						valid = true
+					}
+				}
+				if valid {
+					log.Printf("valid play")
+					c.conn.WriteMessage(websocket.TextMessage, models.BuildServerMessage("validPlay", fmt.Sprintf("%d", msg.Index)))
+				} else {
+					log.Printf("invalid play")
+					c.conn.WriteMessage(websocket.TextMessage, models.BuildServerMessage("invalidPlay", fmt.Sprintf("%d", msg.Index)))
+				}
+			case "play":
+				log.Printf("Client played")
+				attemptDeck, numCardsLeft, equivalentDeck, err := models.ParseClientPlayMessage(msg.Data)
+				if err != nil {
+					log.Printf("Failed to parse play message: %v", err)
+					return
+				}
+				fmt.Println(attemptDeck.String())
+				fmt.Println(equivalentDeck.String())
+				info.SetLastPlayedCards(attemptDeck.GetCards())
+				info.SetLastPlayedIndex(c.Index)
+				info.SetCurrentPlayerIndex((info.GetCurrentPlayerIndex() + 1) % info.GetNumPlayers())
+				broadcastMessage(models.BuildServerMessage("lastPlay", models.CardsString(info.GetLastPlayedCards())))
+				if numCardsLeft == 0 {
+					info.SetFinishedIndexes(append(info.GetFinishedIndexes(), c.Index))
+					if len(info.GetFinishedIndexes()) == info.GetNumPlayers() {
+						info.SetIsRoundInSession(false)
+						broadcastMessage(models.BuildServerMessage("allJoined", ""))
+						// to do: reset game
+					}
+				}
+				broadcastMessage(models.BuildServerMessage("play", fmt.Sprintf("%d", info.GetCurrentPlayerIndex())))
+
 			case "tribute":
 				log.Printf("Client %s tributed", msg.Data)
 			case "return":
 				log.Printf("Client %d returned", msg.Index)
-			case "play":
-				log.Printf("Client %d played", msg.Index)
 			case "pass":
 				log.Printf("Client %d passed", msg.Index)
 			case "leave":
@@ -195,11 +240,15 @@ func (c *Client) processClientMsg() {
 				log.Printf("Unknown action: %s", msg.Action)
 			}
 		case websocket.CloseMessage:
-			// to do: release available slots
+			log.Println("Received close message from client")
 			return
 		default:
-			// Handle other message types
-			log.Printf("Received message of type %d", messageType)
+			log.Println("Received unknown message from client")
+			index := c.Index
+			delete(info.GetAvailableSlots(), index)
+			delete(info.GetNames(), index)
+			delete(clients, index)
+			broadcastMessage(models.BuildServerMessage("leave", fmt.Sprintf("%d", index)))
 			return
 		}
 	}
@@ -234,6 +283,8 @@ func main() {
 
 	// Configure WebSocket route
 	http.HandleFunc("/ws", handleWebSocket)
+
+	rule.SetInfo(info)
 
 	// Start the server
 	serverAddr := fmt.Sprintf(":%d", *port)

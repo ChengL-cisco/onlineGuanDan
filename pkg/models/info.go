@@ -32,10 +32,42 @@ type Info struct {
 	secondToLastFinishedIndex int
 	// lastPlayedCards is the list of cards played by the last player
 	lastPlayedCards []Card
+	// lastPlayedIndex is the index of the last player to play
+	lastPlayedIndex int
 	// available slots for players
 	availableSlots map[int]bool
 	// names of players
 	names map[int]string
+	// finishedIndexes is a list of indexes of players who have finished a round
+	finishedIndexes []int
+}
+
+// GetLastPlayedIndex returns the index of the last player to play
+func (i *Info) GetLastPlayedIndex() int {
+	return i.lastPlayedIndex
+}
+
+// SetLastPlayedIndex sets the index of the last player to play
+func (i *Info) SetLastPlayedIndex(index int) {
+	i.lastPlayedIndex = index
+}
+
+// GetFinishedIndexes returns the list of player indexes who have finished the round
+func (i *Info) GetFinishedIndexes() []int {
+	if i.finishedIndexes == nil {
+		i.finishedIndexes = make([]int, 0)
+	}
+	return i.finishedIndexes
+}
+
+// SetFinishedIndexes sets the list of player indexes who have finished the round
+func (i *Info) SetFinishedIndexes(indexes []int) {
+	i.finishedIndexes = indexes
+}
+
+// ResetFinishedIndexes clears the list of finished player indexes
+func (i *Info) ResetFinishedIndexes() {
+	i.finishedIndexes = nil
 }
 
 // GetReadyToStartMap returns a reference to the readyToStart map

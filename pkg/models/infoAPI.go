@@ -25,6 +25,11 @@ type InfoAPI interface {
 	SetAvailableSlots(slots map[int]bool)
 	GetNames() map[int]string
 	SetNames(names map[int]string)
+	GetLastPlayedIndex() int
+	SetLastPlayedIndex(index int)
+	GetFinishedIndexes() []int
+	SetFinishedIndexes(indexes []int)
+	ResetFinishedIndexes()
 
 	// Round information
 	GetIsFirstRound() bool
