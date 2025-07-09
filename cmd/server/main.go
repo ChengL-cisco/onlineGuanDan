@@ -100,7 +100,14 @@ func (c *Client) processClientMsg() {
 		messageType, message, err := c.conn.ReadMessage()
 		log.Printf("Received message: %v", string(message))
 		if err != nil {
-			log.Printf("WebSocket error: %v", err)
+			// Handle the error, which might be a CloseError
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				// The client initiated a normal closure
+				fmt.Println("Client closed connection with normal closure")
+			} else {
+				// Some other error occurred
+				fmt.Println("Error reading from client:", err)
+			}
 		}
 
 		switch messageType {
@@ -160,6 +167,9 @@ func (c *Client) processClientMsg() {
 					info.SetReadyToStartMap(make(map[int]bool))
 
 					deck = models.NewDeck(models.NumOfDecks(info.GetNumPlayers()))
+					// for testing
+					deck = deck.Split(2)[0]
+
 					decks := deck.Split(info.GetNumPlayers())
 					for index, deck := range decks {
 						deck.Sort(info.GetTrumpRank())
@@ -181,20 +191,20 @@ func (c *Client) processClientMsg() {
 				}
 				mutex.Unlock()
 			case "playAttempt":
-				log.Printf("Client %d wants to play %s", msg.Index, msg.Data)
-				deck, err := models.NewDeckFromString(msg.Data)
+				cards, _, equivalentAttempt, err := models.ParseClientPlayMessage(msg.Data)
 				if err != nil {
-					log.Printf("Failed to parse cards: %v", err)
+					log.Printf("Failed to parse play message: %v", err)
 					return
 				}
-				fmt.Println(deck.String())
+				fmt.Println(cards.String())
+				fmt.Println(equivalentAttempt.String())
 				valid := false
 				if info.GetLastPlayedCards() == nil || info.GetLastPlayedIndex() == msg.Index {
-					if rule.IsPlayValid(deck.GetCards()) {
+					if rule.IsPlayValid(equivalentAttempt.GetCards()) {
 						valid = true
 					}
 				} else {
-					if rule.IsCounterPlayValid(info.GetLastPlayedCards(), deck.GetCards()) {
+					if rule.IsCounterPlayValid(info.GetLastPlayedCards(), equivalentAttempt.GetCards()) {
 						valid = true
 					}
 				}
@@ -214,13 +224,16 @@ func (c *Client) processClientMsg() {
 				}
 				fmt.Println(attemptDeck.String())
 				fmt.Println(equivalentDeck.String())
-				info.SetLastPlayedCards(attemptDeck.GetCards())
+				info.SetLastPlayedCards(equivalentDeck.GetCards())
 				info.SetLastPlayedIndex(c.Index)
 				info.SetCurrentPlayerIndex((info.GetCurrentPlayerIndex() + 1) % info.GetNumPlayers())
-				broadcastMessage(models.BuildServerMessage("lastPlay", models.CardsString(info.GetLastPlayedCards())))
+				broadcastMessage(models.BuildServerMessage("lastPlay", fmt.Sprintf("%d", c.Index)+";"+fmt.Sprintf("%d", numCardsLeft)+";"+models.CardsString(attemptDeck.GetCards())+";"+models.CardsString(equivalentDeck.GetCards())))
 				if numCardsLeft == 0 {
+					fmt.Println("Index ", c.Index, " finished")
 					info.SetFinishedIndexes(append(info.GetFinishedIndexes(), c.Index))
-					if len(info.GetFinishedIndexes()) == info.GetNumPlayers() {
+					if len(info.GetFinishedIndexes()) == info.GetNumPlayers()-1 {
+						fmt.Println("Everybody finished, calculating...")
+						// do calculation and broadcast result
 						info.SetIsRoundInSession(false)
 						broadcastMessage(models.BuildServerMessage("allJoined", ""))
 						// to do: reset game
@@ -234,6 +247,8 @@ func (c *Client) processClientMsg() {
 				log.Printf("Client %d returned", msg.Index)
 			case "pass":
 				log.Printf("Client %d passed", msg.Index)
+				info.SetCurrentPlayerIndex((info.GetCurrentPlayerIndex() + 1) % info.GetNumPlayers())
+				broadcastMessage(models.BuildServerMessage("play", fmt.Sprintf("%d", info.GetCurrentPlayerIndex())))
 			case "leave":
 				log.Printf("Client %d left", msg.Index)
 			default:
@@ -241,9 +256,11 @@ func (c *Client) processClientMsg() {
 			}
 		case websocket.CloseMessage:
 			log.Println("Received close message from client")
+			c.conn.Close()
 			return
 		default:
 			log.Println("Received unknown message from client")
+			c.conn.Close()
 			index := c.Index
 			delete(info.GetAvailableSlots(), index)
 			delete(info.GetNames(), index)

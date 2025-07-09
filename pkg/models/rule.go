@@ -163,7 +163,7 @@ func (r *Rule) IsCounterPlayValid(play []Card, counterPlay []Card) bool {
 				return true
 			}
 		} else if r.isFullHouse(play) {
-			if r.isFullHouse(counterPlay) && r.isGreaterFullHouse(counterPlay, play) {
+			if r.isFullHouse(counterPlay) && r.isGreaterFullHouse(play, counterPlay) {
 				return true
 			}
 
@@ -471,7 +471,7 @@ func (r *Rule) areRanksConsecutive(ranks []Rank) bool {
 	})
 
 	// Special case for Ace-2-3 straight
-	if ranks[0] == Two && ranks[1] == Three && ranks[2] == Four &&
+	if len(ranks) == 6 && ranks[0] == Two && ranks[1] == Three && ranks[2] == Four &&
 		ranks[3] == Five && ranks[4] == Six && ranks[5] == Ace {
 		return true
 	}

@@ -22,6 +22,40 @@ type ServerMessage struct {
 	Data   string `json:"data"`
 }
 
+func ParseLastPlayServerMessage(msg string) (int, int, DeckAPI, DeckAPI, error) {
+	// Split the message by semicolon
+	parts := strings.SplitN(msg, ";", 4)
+	if len(parts) != 4 {
+		return 0, 0, nil, nil, fmt.Errorf("invalid message format: expected 4 parts separated by ';'")
+	}
+
+	// Parse player index
+	playerIndex, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, nil, nil, fmt.Errorf("invalid player index: %v", err)
+	}
+
+	// Parse numCardsLeft
+	numCardsLeft, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, nil, nil, fmt.Errorf("invalid number of cards left: %v", err)
+	}
+
+	// Parse attempt cards
+	attemptDeck, err := NewDeckFromString(parts[2])
+	if err != nil {
+		return 0, 0, nil, nil, fmt.Errorf("failed to parse attempt cards: %v", err)
+	}
+
+	// Parse equivalent cards
+	equivalentDeck, err := NewDeckFromString(parts[3])
+	if err != nil {
+		return 0, 0, nil, nil, fmt.Errorf("failed to parse equivalent cards: %v", err)
+	}
+
+	return playerIndex, numCardsLeft, attemptDeck, equivalentDeck, nil
+}
+
 // ConstructStartRoundServerMessage constructs a start round message string from the given deck and info
 // deck is the deck of cards
 // info is the game info
@@ -29,7 +63,7 @@ func ConstructStartRoundServerMessage(deck DeckAPI, info InfoAPI) string {
 	return CardsString(deck.GetCards()) + ";" + RankToString(info.GetTrumpRank()) + ";" + strings.Trim(fmt.Sprint(info.GetFinishedIndexes()), "[]")
 }
 
-func ParseStartRoundServerMessage(msg string) (DeckAPI, Rank, []int, error) {
+func ParseStartRoundServerMessage(msg string) (*Deck, Rank, []int, error) {
 	// Split the message by semicolon
 	parts := strings.SplitN(msg, ";", 3)
 	if len(parts) != 3 {
